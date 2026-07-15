@@ -1,42 +1,92 @@
 FROM php:8.3-apache
 
-# Cài extension PHP và công cụ cần thiết
+# ======================
+# Install system packages
+# ======================
 RUN apt-get update && apt-get install -y \
     git \
+    curl \
     unzip \
     zip \
-    curl \
     libzip-dev \
     libpng-dev \
+    libjpeg62-turbo-dev \
+    libfreetype6-dev \
     libonig-dev \
     libxml2-dev \
-    nodejs \
-    npm \
-    && docker-php-ext-install pdo_mysql zip
+    libicu-dev \
+    libpq-dev \
+    libsqlite3-dev \
+    libsqlite3-0 \
+    libssl-dev
 
-# Cài Composer
+# ======================
+# Install PHP extensions
+# ======================
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg
+
+RUN docker-php-ext-install \
+    pdo \
+    pdo_mysql \
+    mbstring \
+    bcmath \
+    exif \
+    pcntl \
+    intl \
+    gd \
+    zip
+
+# ======================
+# Install Node.js 22
+# ======================
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+
+RUN apt-get install -y nodejs
+
+# ======================
+# Install Composer
+# ======================
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Bật Apache Rewrite
+# ======================
+# Enable Apache Rewrite
+# ======================
 RUN a2enmod rewrite
 
 WORKDIR /var/www/html
 
-# Copy source
+# ======================
+# Copy project
+# ======================
 COPY . .
 
-# Cài package PHP
-RUN composer install --no-dev --optimize-autoloader
+# ======================
+# Install PHP packages
+# ======================
+RUN composer install \
+    --no-dev \
+    --optimize-autoloader \
+    --no-interaction
 
-# Cài package Node và build Vite
+# ======================
+# Install JS packages
+# ======================
 RUN npm install
+
 RUN npm run build
 
-# Cấp quyền
+# ======================
+# Permissions
+# ======================
+RUN mkdir -p storage/logs
+
 RUN chown -R www-data:www-data storage bootstrap/cache
+
 RUN chmod -R 775 storage bootstrap/cache
 
-# Apache trỏ vào thư mục public
+# ======================
+# Apache DocumentRoot
+# ======================
 ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
 
 RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' \
@@ -46,4 +96,4 @@ RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' \
 
 EXPOSE 80
 
-CMD php artisan migrate --force && apache2-foreground
+CMD ["apache2-foreground"]
